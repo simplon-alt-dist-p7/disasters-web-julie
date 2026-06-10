@@ -14,7 +14,7 @@ import {
   Cloud
 } from 'lucide-react'
 import * as THREE from 'three'
-import _ from 'lodash'
+// import _ from 'lodash'
 
 type Stat = {
   bundle: number
@@ -54,6 +54,22 @@ const color = (v: number, [g, y]: number[], inv = false) =>
     ? 'border-yellow-500/30 bg-yellow-500/20'
     : 'border-red-500/30 bg-red-500/20'
 
+const throttle = <T extends (...args: any[]) => void>(
+  fn: T,
+  delay: number
+) => {
+  let last = 0
+
+  return (...args: Parameters<T>) => {
+    const now = Date.now()
+
+    if (now - last > delay) {
+      last = now
+      fn(...args)
+    }
+  }
+}
+
 export default function App() {
   const [stats, setStats] = useState<Stat>({
     bundle: 0,
@@ -70,62 +86,108 @@ export default function App() {
     pl: 0
   })
   const [ready, setReady] = useState(false)
+  // ajout d'un mode éco pour réduire la fréquence des mises à jour et les animations
+  const [ecoMode, setEcoMode] = useState<boolean>(() => {
+    try {
+      if (typeof window === 'undefined') return false
+      return localStorage.getItem('ecoMode') === '1'
+    } catch {
+      return false
+    }
+  })
+
+  // wrapper pour persister le choix du toggle ecoMode dans le localStorage
+  const toggleEcoMode = () => {
+    setEcoMode(prev => {
+      const next = !prev
+      try {
+        localStorage.setItem('ecoMode', next ? '1' : '0')
+      } catch {}
+      return next
+    })
+  }
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const injectedRef = useRef(false)
   const intervalRef = useRef<number>()
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null) // ajout de refs pour stocker le renderer et l'observer afin de pouvoir les nettoyer correctement
+  const frameIdRef = useRef<number | null>(null) // ajout de refs pour stocker l'id de l'animation frame afin de pouvoir l'annuler lors du nettoyage
+  const perfObserverRef = useRef<PerformanceObserver | null>(null) // ajout de refs pour stocker l'observer de performance afin de pouvoir le nettoyer correctement
+  const computeIntervalRef = useRef<number | null>(null) // ajout de refs pour stocker l'id de l'interval de calcul des stats afin de pouvoir l'annuler lors du nettoyage
 
   useEffect(() => {
+    if (ecoMode) return
+
     const canvas = canvasRef.current
     if (!canvas) return
+
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1_000)
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      canvas.clientWidth / canvas.clientHeight,
+      0.1,
+      1000
+    )
+
     camera.position.z = 30
+
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
-    renderer.setSize(canvas.clientWidth || 640, canvas.clientHeight || 480)
-    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight)
+    rendererRef.current = renderer // ajout du renderer à une ref pour pouvoir le nettoyer plus tard
+
     const ambient = new THREE.AmbientLight(0xffffff, 0.3)
     scene.add(ambient)
+
     const dir = new THREE.DirectionalLight(0xffffff, 0.8)
     dir.position.set(25, 25, 25)
     scene.add(dir)
+
+    const cubes: THREE.Mesh[] = []
+
     for (let i = 0; i < 20; i++) {
-      const mat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff, shininess: 80 })
-      const geo = new THREE.BoxGeometry(1 + Math.random(), 1 + Math.random(), 1 + Math.random())
+      const mat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff })
+      const geo = new THREE.BoxGeometry(1, 1, 1)
       const cube = new THREE.Mesh(geo, mat)
-      cube.position.set((Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50, (Math.random() - 0.5) * 50)
+
+      cube.position.set(
+        (Math.random() - 0.5) * 50,
+        (Math.random() - 0.5) * 50,
+        (Math.random() - 0.5) * 50
+      )
+
+      cubes.push(cube)
       scene.add(cube)
     }
+
     const animate = () => {
-      let i = 0
-      scene.traverse((o: any) => {
-        if (o.isMesh) {
-          o.rotation.x += 0.002 * ((i % 3) + 1)
-          o.rotation.y += 0.003 * ((i % 4) + 1)
-        }
-        i++
+      cubes.forEach((c, i) => {
+        c.rotation.x += 0.002 * (i % 3)
+        c.rotation.y += 0.003 * (i % 4)
       })
+
       renderer.render(scene, camera)
-      requestAnimationFrame(animate)
+      frameIdRef.current = requestAnimationFrame(animate) // ajout du frameIdRef.current pour pouvoir annuler l'animation plus tard
     }
+
     animate()
-    const onResize = _.throttle(() => {
+
+    const onResize = throttle(() => {
       camera.aspect = canvas.clientWidth / canvas.clientHeight
       camera.updateProjectionMatrix()
+
       renderer.setSize(canvas.clientWidth, canvas.clientHeight)
     }, 200)
+
     window.addEventListener('resize', onResize)
+
     return () => {
-      window.removeEventListener('resize', onResize)
+      if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current) // condition avec frameIdRef.current pour éviter d'appeler cancelAnimationFrame avec une valeur null
       renderer.dispose()
-      scene.traverse((o: any) => {
-        if (o.geometry) o.geometry.dispose()
-        if (o.material) {
-          Array.isArray(o.material) ? o.material.forEach((m: any) => m.dispose()) : o.material.dispose()
-        }
-      })
+      scene.clear()
+      rendererRef.current = null // nettoyage du renderer
+      frameIdRef.current = null // nettoyage du frameId
     }
-  }, [])
+  }, [ecoMode])
 
   useEffect(() => {
     if (injectedRef.current) return
@@ -190,13 +252,19 @@ export default function App() {
       window.addEventListener('load', computeStats, { once: true });
     }
 
-    // Ajout du rafraîchissement périodique
-    const interval = setInterval(computeStats, 2000);
+    // Rafraîchissement périodique, plus lent en ecoMode (10 secondes au lieu de 2) pour réduire la charge
+    const intervalTime = ecoMode ? 10000 : 2000
+    if (computeIntervalRef.current) window.clearInterval(computeIntervalRef.current) // ajout d'une condition pour nettoyer l'interval précédent avant d'en créer un nouveau
+    computeIntervalRef.current = window.setInterval(computeStats, intervalTime)
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      if (computeIntervalRef.current) window.clearInterval(computeIntervalRef.current)
+    }
+  }, [ecoMode]); // ajout de ecoMode dans les dépendances pour recréer l'interval avec la bonne fréquence lorsque le mode éco est activé ou désactivé
 
   useEffect(() => {
+    if (ecoMode) return // ne pas créer l'observer de performance en mode éco pour réduire la charge
+
     const po = new PerformanceObserver(list => {
       const res = list.getEntries() as PerformanceResourceTiming[]
       const added = res.reduce((a, b) => a + (b.transferSize || 0), 0)
@@ -212,16 +280,27 @@ export default function App() {
         return { ...s, weight, js: s.js + jsAdd, css: s.css + cssAdd, img: s.img + imgAdd, cache }
       })
     })
+    perfObserverRef.current = po // ajout de l'observer de performance à une ref pour pouvoir le nettoyer plus tardnce 
     po.observe({ type: 'resource', buffered: true })
-    return () => po.disconnect()
-  }, [])
+    return () => {
+      po.disconnect()
+      perfObserverRef.current = null // nettoyage de l'observer de performance
+    }
+  }, [ecoMode]) // ajout de ecoMode dans les dépendances pour ne pas créer l'observer de performance en mode éco
 
   useEffect(() => {
-    if (intervalRef.current) return
+    // always recreate interval when ecoMode changes to adapt frequency
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = undefined
+    }
 
+    const pollInterval = ecoMode ? 10_000 : 1_000
     intervalRef.current = window.setInterval(async () => {
-      for (let i = 0; i < 2; i++) {
-        fetch(`http://localhost:5001/api/payload?${Date.now()}_${i}`)
+      if (!ecoMode) { // ajout de la condition avec ecoMode pour ne pas faire ces requêtes supplémentaires en mode éco et ainsi réduire la charge sur le serveur
+        for (let i = 0; i < 2; i++) {
+          fetch(`http://localhost:5001/api/payload?${Date.now()}_${i}`)
+        }
       }
 
       try {
@@ -238,10 +317,17 @@ export default function App() {
       } catch (err) {
         console.warn('Erreur lors du fetch des stats serveur', err)
       }
-    }, 1_000)
+    }, pollInterval) // on renseigne pollInterval qui dépend de ecoMode pour adapter la fréquence des requêtes en fonction du mode
 
-    return () => clearInterval(intervalRef.current)
-  }, [])
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current) // ajout de la condition pour éviter d'appeler clearInterval avec une valeur Undefined
+      intervalRef.current = undefined
+    }
+  }, [ecoMode])
+
+  useEffect(() => {
+    document.body.classList.toggle('eco-mode', ecoMode)
+  }, [ecoMode])
 
   if (!ready)
     return (
@@ -260,24 +346,32 @@ export default function App() {
       </div>
       <div className="relative z-10 container mx-auto px-6 py-12">
         <header className="text-center mb-16">
+          <div className="flex justify-center items-center gap-4 mt-4">
+          <button
+            onClick={toggleEcoMode}
+            className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 hover:bg-white/20 transition"
+          >
+            {ecoMode ? 'Activer le mode FULL performance 🔥' : 'Activer le mode éco ♻️'}
+          </button>
+        </div>
           <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent mb-6 animate-pulse">
             EcoTraining Platform
           </h1>
           <p className="text-xl text-slate-300 max-w-3xl mx-auto">Plateforme d'entraînement avancée pour l'optimisation web et l'éco-conception</p>
         </header>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 mb-16">
-          <Card icon={<Database className="w-8 h-8 text-purple-400" />} title="Poids HTML" value={`${(stats.bundle / 1_024).toFixed(0)} kB`} tone={color(stats.bundle, limits.weight)} tip="transferSize du document" />
-          <Card icon={<Globe className="w-8 h-8 text-blue-400" />} title="Poids page" value={`${(stats.weight / 1_024).toFixed(0)} kB`} tone={color(stats.weight, limits.weight)} tip="somme transferSize" />
-          <Card icon={<Layers className="w-8 h-8 text-teal-400" />} title="DOM" value={stats.dom} tone={color(stats.dom, limits.dom)} tip="nombre de nœuds" />
-          <Card icon={<Activity className="w-8 h-8 text-green-400" />} title="Ressources" value={stats.resources} tone={color(stats.resources, limits.resources)} tip="entries PerformanceResourceTiming" />
-          <Card icon={<FileText className="w-8 h-8 text-fuchsia-400" />} title="JS" value={`${(stats.js / 1_024).toFixed(0)} kB`} tone={color(stats.js, limits.js)} />
-          <Card icon={<FilePlus className="w-8 h-8 text-sky-400" />} title="CSS" value={`${(stats.img / 1024).toFixed(1)} kB`} tone={color(stats.css, limits.css)} />
-          <Card icon={<Image className="w-8 h-8 text-amber-400" />} title="Images" value={`${(stats.img / 1_024).toFixed(0)} kB`} tone={color(stats.img, limits.img)} />
-          <Card icon={<Cloud className="w-8 h-8 text-emerald-400" />} title="Cache hit" value={`${Math.round(stats.cache * 100)} %`} tone={color(stats.cache, limits.cache, true)} />
-          <Card icon={<MemoryStick className="w-8 h-8 text-red-400" />} title="RAM serveur" value={`${stats.memory} MB`} tone="bg-white/10 border-white/20" />
-          <Card icon={<Cpu className="w-8 h-8 text-indigo-400" />} title="CPU" value={stats.load} tone="bg-white/10 border-white/20" />
-          <Card icon={<Activity className="w-8 h-8 text-lime-400" />} title="RPS" value={stats.rps} tone="bg-white/10 border-white/20" />
-          <Card icon={<Timer className="w-8 h-8 text-yellow-400" />} title="Load page" value={`${stats.pl} ms`} tone="bg-white/10 border-white/20" />
+          <Card icon={<Database className="w-8 h-8 text-purple-400" />} title="Poids HTML" value={`${(stats.bundle / 1_024).toFixed(0)} kB`} tone={color(stats.bundle, limits.weight)} tip="Poids du document HTML" />
+          <Card icon={<Globe className="w-8 h-8 text-blue-400" />} title="Poids page" value={`${(stats.weight / 1_024).toFixed(0)} kB`} tone={color(stats.weight, limits.weight)} tip="Poids total de la page" />
+          <Card icon={<Layers className="w-8 h-8 text-teal-400" />} title="DOM" value={stats.dom} tone={color(stats.dom, limits.dom)} tip="Nombre de nœuds dans le DOM" />
+          <Card icon={<Activity className="w-8 h-8 text-green-400" />} title="Ressources" value={stats.resources} tone={color(stats.resources, limits.resources)} tip="Quantité de ressources chargées en mémoire" />
+          <Card icon={<FileText className="w-8 h-8 text-fuchsia-400" />} title="JS" value={`${(stats.js / 1_024).toFixed(0)} kB`} tone={color(stats.js, limits.js)} tip="Taille du script JS" />
+          <Card icon={<FilePlus className="w-8 h-8 text-sky-400" />} title="CSS" value={`${(stats.css / 1024).toFixed(1)} kB`} tone={color(stats.css, limits.css)} tip="Taille du feuille de style CSS" />
+          <Card icon={<Image className="w-8 h-8 text-amber-400" />} title="Images" value={`${(stats.img / 1_024).toFixed(0)} kB`} tone={color(stats.img, limits.img)} tip="Poids total des images" />
+          <Card icon={<Cloud className="w-8 h-8 text-emerald-400" />} title="Cache hit" value={`${Math.round(stats.cache * 100)} %`} tone={color(stats.cache, limits.cache, true)} tip="Pourcentage de requêtes satisfaites depuis le cache" />
+          <Card icon={<MemoryStick className="w-8 h-8 text-red-400" />} title="RAM serveur" value={`${stats.memory} MB`} tone="bg-white/10 border-white/20" tip="Quantité de mémoire vive utilisée par le serveur" />
+          <Card icon={<Cpu className="w-8 h-8 text-indigo-400" />} title="CPU" value={stats.load} tone="bg-white/10 border-white/20" tip="Taux d'utilisation du processeur" />
+          <Card icon={<Activity className="w-8 h-8 text-lime-400" />} title="RPS" value={stats.rps} tone="bg-white/10 border-white/20" tip="Requêtes par seconde" />
+          <Card icon={<Timer className="w-8 h-8 text-yellow-400" />} title="Load page" value={`${stats.pl} ms`} tone="bg-white/10 border-white/20" tip="Temps de chargement de la page" />
         </section>
         <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 mb-16">
           <div className="flex items-center gap-4 mb-6">

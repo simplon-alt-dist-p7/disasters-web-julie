@@ -185,3 +185,9 @@ body {
 
 .animate-float { animation: float 3s ease-in-out infinite; }
 .animate-glow { animation: glow 2s ease-in-out infinite; }
+
+/* Ajout de l'éco-mode */
+.eco-mode * {
+  animation: none !important;
+  transition: none !important;
+}
