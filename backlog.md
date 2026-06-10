@@ -41,6 +41,68 @@
 - 🛠️ KPI : score accessibilité Lighthouse > 90
 - 📅 Tag roadmap : M4
 
-...
+---
+
+### Story 4 : Désactivation des animations
+
+**En tant que** utilisateur facilement déconcentré ou sensible aux mouvements,
+**je veux** pouvoir désactiver les animations de l'interface,
+**afin de** rester concentré sur le contenu et éviter toute gêne visuelle.
+
+- 🎯 Objectif : mode "Réduire les animations" disponible dans les préférences
+- 🧱 BP associée : respect de prefers-reduced-motion (WCAG)
+- 🛠️ KPI : 100 % des animations CSS et Three.js désactivables
+- 📅 Tag roadmap : M2
 
 ---
+
+### Story 5 : Retour visuel rapide lors des chargements
+
+**En tant que** utilisateur impatient,
+**je veux** être informé immédiatement lorsqu'un contenu est en cours de chargement,
+**afin de** comprendre que l'application fonctionne correctement.
+
+- 🎯 Objectif : affichage systématique d'un indicateur de chargement ou skeleton screen
+- 🧱 BP associée : perception de performance
+- 🛠️ KPI : aucun écran vide supérieur à 500 ms
+- 📅 Tag roadmap : M2
+
+---
+
+### Story 6 : Rationalisation des styles globaux
+
+**En tant que** développeur frontend,
+**je veux** simplifier et factoriser les styles du fichier index.css,
+**afin de** faciliter la maintenance et réduire le volume de CSS chargé.
+
+- 🎯 Objectif : suppression des styles inutilisés et mutualisation des tokens
+- 🧱 BP associée : réduction du code mort
+- 🛠️ KPI : réduction du poids CSS de 30 %
+- 📅 Tag roadmap : M2
+
+---
+
+<!-- ⚠️ 1466 requêtes HTTP -->
+### Story 7 : Réduction du nombre de requêtes HTTP
+
+**En tant que** développeur frontend,
+**je veux** limiter le nombre de ressources téléchargées,
+**afin de** réduire le temps de chargement et l'impact environnemental.
+
+- 🎯 Objectif : moins de 100 requêtes HTTP
+- 🧱 BP associée : sobriété réseau
+- 🛠️ KPI : nombre de requêtes observées par GreenIT
+- 📅 Tag roadmap : M2
+
+---
+
+### Story 8 : Réduction des dépendances inutilisées
+
+**En tant que** développeur frontend,
+**je veux** identifier et supprimer les bibliothèques peu ou pas utilisées,
+**afin de** réduire la dette technique et la taille du bundle.
+
+- 🎯 Objectif : audit complet des dépendances npm
+- 🧱 BP associée : sobriété logicielle
+- 🛠️ KPI : réduction du nombre de dépendances de 20 %
+- 📅 Tag roadmap : M3
