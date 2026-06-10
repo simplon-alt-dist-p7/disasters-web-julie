@@ -1,5 +1,28 @@
 :root {
   --h: 0;
+}
+
+/* Minimal loader / theme helper for the static assets */
+.loader-fat {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  border: 8px solid rgba(255,255,255,0.12);
+  border-top-color: hsl(var(--h, 0), 65%, 55%);
+  animation: spin 2.5s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+body { background: #0b1220; color: #fff; }
+
+ /* -------------------------------------------------------------------------- */
+ /* Previous heavier version for reference (commented out to avoid accidental use) */
+
+/* :root {
+  --h: 0;
   --s: 65%;
   --l: 55%;
 }
@@ -115,4 +138,4 @@ body {
   opacity: .15;
   will-change: transform;
   animation: spin 120s linear infinite;
-}
+} */

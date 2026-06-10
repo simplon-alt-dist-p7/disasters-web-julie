@@ -54,7 +54,7 @@ const color = (v: number, [g, y]: number[], inv = false) =>
     ? 'border-yellow-500/30 bg-yellow-500/20'
     : 'border-red-500/30 bg-red-500/20'
 
-const throttle = <T extends (...args: any[]) => void>(
+const throttle = <T extends (...args: any[]) => void>( // le throttle est une optimisation pour éviter d'appeler une fonction trop fréquemment, ici utilisé pour limiter la fréquence des redimensionnements du canvas et des calculs de stats lors de l'activation du mode éco
   fn: T,
   delay: number
 ) => {
@@ -114,6 +114,9 @@ export default function App() {
   const frameIdRef = useRef<number | null>(null) // ajout de refs pour stocker l'id de l'animation frame afin de pouvoir l'annuler lors du nettoyage
   const perfObserverRef = useRef<PerformanceObserver | null>(null) // ajout de refs pour stocker l'observer de performance afin de pouvoir le nettoyer correctement
   const computeIntervalRef = useRef<number | null>(null) // ajout de refs pour stocker l'id de l'interval de calcul des stats afin de pouvoir l'annuler lors du nettoyage
+
+  const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_API_BASE)
+    || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5001` : 'http://localhost:5001')
 
   useEffect(() => {
     if (ecoMode) return
@@ -196,10 +199,10 @@ export default function App() {
       const h = document.head
       const link = document.createElement('link')
       link.rel = 'stylesheet'
-      link.href = 'http://localhost:5001/static/big.css'
+      link.href = `${API_BASE}/static/big.css`
       h.appendChild(link)
       const script = document.createElement('script')
-      script.src = 'http://localhost:5001/static/big.js'
+      script.src = `${API_BASE}/static/big.js`
       script.crossOrigin = 'anonymous'
       h.appendChild(script)
     }
@@ -299,12 +302,12 @@ export default function App() {
     intervalRef.current = window.setInterval(async () => {
       if (!ecoMode) { // ajout de la condition avec ecoMode pour ne pas faire ces requêtes supplémentaires en mode éco et ainsi réduire la charge sur le serveur
         for (let i = 0; i < 2; i++) {
-          fetch(`http://localhost:5001/api/payload?${Date.now()}_${i}`)
+          fetch(`${API_BASE}/api/payload?${Date.now()}_${i}`)
         }
       }
 
       try {
-        const { memory, load, rps } = await fetch('http://localhost:5001/api/server', {
+        const { memory, load, rps } = await fetch(`${API_BASE}/api/server`, {
           cache: 'no-store'
         }).then(r => r.json())
 
@@ -341,9 +344,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
-      <div className="fixed inset-0 opacity-10 pointer-events-none">
-        <img src="http://localhost:5001/static/large.jpg" className="absolute inset-0 w-full h-full object-cover mix-blend-overlay" />
-      </div>
+      {/* <div className="fixed inset-0 opacity-10 pointer-events-none">
+        <img src={`${API_BASE}/static/large.jpg`} className="absolute inset-0 w-full h-full object-cover mix-blend-overlay" />
+      </div> */}
       <div className="relative z-10 container mx-auto px-6 py-12">
         <header className="text-center mb-16">
           <div className="flex justify-center items-center gap-4 mt-4">
@@ -369,14 +372,14 @@ export default function App() {
           <Card icon={<Image className="w-8 h-8 text-amber-400" />} title="Images" value={`${(stats.img / 1_024).toFixed(0)} kB`} tone={color(stats.img, limits.img)} tip="Poids total des images" />
           <Card icon={<Cloud className="w-8 h-8 text-emerald-400" />} title="Cache hit" value={`${Math.round(stats.cache * 100)} %`} tone={color(stats.cache, limits.cache, true)} tip="Pourcentage de requêtes satisfaites depuis le cache" />
           <Card icon={<MemoryStick className="w-8 h-8 text-red-400" />} title="RAM serveur" value={`${stats.memory} MB`} tone="bg-white/10 border-white/20" tip="Quantité de mémoire vive utilisée par le serveur" />
-          <Card icon={<Cpu className="w-8 h-8 text-indigo-400" />} title="CPU" value={stats.load} tone="bg-white/10 border-white/20" tip="Taux d'utilisation du processeur" />
+          <Card icon={<Cpu className="w-8 h-8 text-indigo-400" />} title="CPU" value={stats.load} tone="bg-white/10 border-white/20" tip="Taux d'utilisation du processeur"/>
           <Card icon={<Activity className="w-8 h-8 text-lime-400" />} title="RPS" value={stats.rps} tone="bg-white/10 border-white/20" tip="Requêtes par seconde" />
           <Card icon={<Timer className="w-8 h-8 text-yellow-400" />} title="Load page" value={`${stats.pl} ms`} tone="bg-white/10 border-white/20" tip="Temps de chargement de la page" />
         </section>
         <section className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 mb-16">
           <div className="flex items-center gap-4 mb-6">
             <Zap className="w-8 h-8 text-yellow-400" />
-            <h2 className="text-2xl font-bold text-white">Visualisation 3D</h2>
+            <h2 className="text-2xl font-bold">Visualisation 3D</h2>
           </div>
           <div className="flex justify-center">
             <canvas ref={canvasRef} className="rounded-xl border border-white/20 shadow-2xl w-full h-96" />
@@ -393,9 +396,9 @@ function Card({ icon, title, value, tone, tip }: { icon: React.ReactNode; title:
     <div className={`backdrop-blur-lg rounded-2xl p-8 border hover:bg-white/15 hover:scale-105 transition ${tone}`} title={tip || ''}>
       <div className="flex items-center justify-between mb-4">
         {icon}
-        <span className="text-3xl font-bold text-white">{value}</span>
+        <span className="text-3xl font-bold">{value}</span>
       </div>
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <h3 className="text-lg font-semibold">{title}</h3>
     </div>
   )
 }
